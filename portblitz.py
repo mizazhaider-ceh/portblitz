@@ -35,14 +35,24 @@ def main():
     parser.add_argument("--noping", action="store_true", help="Skip live host discovery")
     parser.add_argument("--json", action="store_true", help="Export to JSON")
     parser.add_argument("--csv", action="store_true", help="Export to CSV")
+    parser.add_argument("--scripts", action="store_true", help="Enable PortBlitz Script Engine (PBSE)")
+    parser.add_argument("--vuln", action="store_true", help="Enable CVE Lookup & Vulnerability Checks")
+    parser.add_argument("--waf", action="store_true", help="Enable WAF Evasion (Random UA / Delays)")
+    parser.add_argument("--bridge", action="store_true", help="Enable Tool Bridge (Auto-trigger Nmap/Nuclei)")
     
     args = parser.parse_args()
     
-    # Imports for v3.0
+    # Imports for v3.0 logic
     from utils.net import parse_targets, load_targets_from_file
     from core.live import filter_live_hosts
     from core.rate import RateLimiter
     from utils.display import VERSION
+    
+    # Imports for v4.0 Intelligence
+    from core.engine import ScriptEngine
+    from utils.cve import lookup_cves
+    from core.waf import evasion_delay
+    from modules.bridge import ToolBridge
     
     print_banner()
     
@@ -57,40 +67,37 @@ def main():
             
     if args.target:
         targets.extend(parse_targets(args.target))
-        
-    targets = list(set(targets)) # Deduplicate
+    targets = list(set(targets))
     
     if not targets:
         print(f"{Colors.RED}[!] No targets specified. Use target arg or -iL{Colors.RESET}")
         parser.print_help()
         sys.exit(1)
-
-    # ... (Previous args parsing code remains similar, but we restructure execution)
     
-    # 2. Parse Ports (Sync)
+    # 2. Parse Ports
     ports = []
     if args.ports == "top":
         ports = STANDARD_PORTS
-        port_desc = "Top 1000+ (Common)"
     elif args.ports == "all":
         ports = list(range(1, 65536))
-        port_desc = "ALL (1-65535) - ⚠️ High Traffic"
     elif "-" in args.ports:
         start, end = map(int, args.ports.split("-"))
         ports = list(range(start, end + 1))
-        port_desc = f"Range {start}-{end}"
     else:
         ports = [int(p) for p in args.ports.split(",")]
-        port_desc = f"Specific ({len(ports)} ports)"
 
-    print(f"{Colors.BOLD}Targets:{Colors.RESET} {len(targets)} hosts")
-    print(f"{Colors.BOLD}Ports  :{Colors.RESET} {port_desc}")
-    print(f"{Colors.BOLD}Speed  :{Colors.RESET} {args.concurrency} threads (Rate: {args.rate if args.rate > 0 else 'Unlimited'} pkts/s)")
+    port_count_str = f"{len(ports)} ports" if len(ports) < 20 else f"{len(ports)} ports (Range/Top)"
+    print(f"{Colors.BOLD}Targets :{Colors.RESET} {len(targets)} hosts")
+    print(f"{Colors.BOLD}Ports   :{Colors.RESET} {port_count_str}")
+    print(f"{Colors.BOLD}Features:{Colors.RESET} Scans: {args.concurrency}th | Rate: {args.rate if args.rate else 'Unlim'} | Scripts: {'ON' if args.scripts else 'OFF'} | Vuln: {'ON' if args.vuln else 'OFF'}")
     print(f"{Colors.DIM}{'-'*40}{Colors.RESET}\n")
-    
+
     # Async Orchestrator
     async def run_orchestrator():
         start_time = time.time()
+        
+        # Init Engine if scripts enabled
+        script_engine = ScriptEngine() if args.scripts else None
         
         # 3. Live Host Discovery
         current_targets = targets
@@ -100,7 +107,7 @@ def main():
                 print(f"{Colors.RED}[!] No live hosts found. Try --noping to force scan.{Colors.RESET}")
                 return
 
-        # 4. Rate Limiter (Created INSIDE the loop)
+        # 4. Rate Limiter
         rate_limiter = RateLimiter(args.rate) if args.rate > 0 else None
 
         # 5. Main Scan Loop
@@ -109,18 +116,61 @@ def main():
             print(f"{Colors.BOLD}[*] Scanning {target} ({i}/{total_hosts})...{Colors.RESET}")
             
             try:
-                # Direct await, no new asyncio.run
+                # WAF Evasion
+                if args.waf:
+                    await evasion_delay(200, 1000)
+
+                # SCAN
                 results = await scan_target(target, ports, args.concurrency, args.timeout, rate_limiter)
                 
                 print(f"{Colors.GREEN}[+] Completed {target}: {len(results)} open ports{Colors.RESET}")
                 
+                # POST-SCAN INTELLIGENCE
+                if results and (args.vuln or args.scripts or args.bridge):
+                    print(f"{Colors.CYAN}    Running Intelligence Checks...{Colors.RESET}")
+                    
+                    for res in results:
+                        port = res['port']
+                        banner = res.get('banner', '')
+                        
+                        # 1. CVE Lookup
+                        if args.vuln:
+                            cves = lookup_cves(str(res))
+                            if cves:
+                                print(f"    {Colors.RED}[!] CVEs Found for Port {port}: {', '.join(cves)}{Colors.RESET}")
+                                res['cves'] = cves
+                        
+                        # 2. Script Engine
+                        if script_engine:
+                            script_results = await script_engine.execute_scripts(target, port, res)
+                            if script_results:
+                                for sr in script_results:
+                                    print(f"    {Colors.MAGENTA}[⚡] {sr['script']}: {sr['output']}{Colors.RESET}")
+                                res['scripts'] = script_results
+                                
+                        # 3. Tool Bridge
+                        if args.bridge:
+                            # Nmap Version Scan (for interesting ports)
+                            if port in [21, 22, 80, 443, 445, 3306, 3389]:
+                                print(f"    {Colors.YELLOW}[+] Bridging Nmap for Port {port}...{Colors.RESET}")
+                                nmap_out = await ToolBridge.run_nmap_version(target, port)
+                                # Simple output or could parse
+                                # print(f"      {nmap_out[:50]}...") 
+                                res['nmap'] = nmap_out
+                                
+                            # Nuclei (for Web)
+                            if port in [80, 443, 8080, 8443]:
+                                print(f"    {Colors.YELLOW}[+] Bridging Nuclei for Port {port}...{Colors.RESET}")
+                                nuclei_out = await ToolBridge.run_nuclei(target, port)
+                                if "No results" not in nuclei_out:
+                                    res['nuclei'] = nuclei_out
+
+                # EXPORTS
                 if results:
                     report_path = generate_report(target, results, args.output)
-                    
                     if args.json:
                         from utils.export import export_json
                         export_json({"target": target, "results": results}, args.output)
-                        
                     if args.csv:
                         from utils.export import export_csv
                         export_csv({"target": target, "results": results}, args.output)

@@ -34,8 +34,16 @@
 - **Rate Limiting:** Control packet rate (`--rate`) to avoid bans.
 - **Smart Exclusion:** Exclude specific IPs/Ports.
 - **Performance:** Structuring for multi-host storage.*
-- **PBSE (PortBlitz Script Engine):** Simple plugin system.
-- **CVE Lookup:** Auto-correlate versions with CVEs.
+### **v4.0: Intelligence & Real-World Integrations [CURRENT TARGET]**
+*Goal: Actionable security findings & tool interoperability.*
+- **PBSE (PortBlitz Script Engine):** Plugin system for custom checks.
+- **Tool Bridge:** Auto-trigger external tools (e.g., `nmap -sV`, `nuclei`) on found ports.
+- **Real-World Checks:**
+    - `ftp-weak-auth`: Detect Anonymous Login & Default Creds.
+    - `ssh-audit`: Identify weak ciphers/keys.
+    - `http-vuln`: Security headers, directory listing, & sensitive files.
+- **CVE Lookup:** Correlate versions with known vulnerabilities.
+- **WAF Evasion:** Random delays, User-Agent rotation, & Decoys.
 
 ### **v5.0: The Command Center**
 *Goal: Enterprise-grade usability.*
