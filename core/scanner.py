@@ -50,7 +50,7 @@ async def worker(target: str, ports: List[int], results: List[Dict], semaphore: 
                 print(f"  {Colors.GREEN}[+] Port {port:<5} OPEN  ({service}){Colors.RESET}")
                 results.append({"port": port, "service": service})
 
-async def scan_target(target: str, ports: List[int], concurrency: int = 500, timeout: float = 1.0) -> List[Dict]:
+async def scan_target(target: str, ports: List[int], concurrency: int = 500, timeout: float = 1.0, rate_limiter: 'RateLimiter' = None) -> List[Dict]:
     """
     Main scanner orchestrator.
     """
@@ -70,6 +70,8 @@ async def scan_target(target: str, ports: List[int], concurrency: int = 500, tim
     
     async def sem_scan(port):
         async with semaphore:
+            if rate_limiter:
+                await rate_limiter.acquire()
             p, is_open = await scan_port(target, port, timeout)
             if is_open:
                 # v2.0: Deep Service Recon

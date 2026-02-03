@@ -1,91 +1,126 @@
-# PortBlitz ⚡
 
-**Ultra-fast Async Port Scanner**
+# ⚡ PortBlitz v3.0
 
-```
-    ⚡ P O R T B L I T Z ⚡   v1.0
-    Ultra-fast Async Port Scanner
-```
+> **Ultra-fast, Asynchronous Port Scanner & Service Reconnaissance Tool**  
+> *Built for speed, scale, and accuracy.*
 
-**Built By:** MIHx0 (Mizaz Haider)  
-**Powered By:** The PenTrix
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+![Python](https://img.shields.io/badge/Python-3.8%2B-blue) ![License](https://img.shields.io/badge/License-MIT-green) ![AsyncIO](https://img.shields.io/badge/Core-AsyncIO-purple)
 
 ---
 
-## 🚀 Overview
+## 📖 Overview
 
-PortBlitz is a high-performance, asynchronous TCP port scanner written in Python. Designed for speed and reliability, it leverages non-blocking I/O to scan thousands of ports in seconds, making it a faster, lightweight alternative to standard threading scanners.
+**PortBlitz** is a next-generation network scanner capable of scanning thousands of ports per second. Built on Python's `asyncio` framework, it offers the speed of compiled tools like Masscan with the flexibility and ease of use of Python.
 
-### Key Features (v2.0)
-- **⚡ Async Architecture**: Uses Python's `asyncio` for high concurrency.
-- **🕵️ Service Recon**: Detects service versions/sw using regex signatures.
-- **� Banner Grabbing**: Captures raw headers from ports.
-- **🌐 HTTP/SSL Analysis**: Extracts titles and generic SSL info.
-- **� Data Export**: Save results to JSON and CSV.
-- **🎨 HTML Reporting**: Beautiful, self-contained reports.
+**v3.0 "Mass Scale" Release** enhances the core engine with enterprise-grade features: multi-host scanning, CIDR network support, rate limiting, and deep service reconnaissance.
+
+---
+
+## 🚀 Key Features
+
+| Feature | Description |
+| :--- | :--- |
+| **⚡ Blazing Fast** | Non-blocking async engine scans 1000+ ports/sec in pure Python. |
+| **🧠 Smart Recon** | Auto-detects services (Apache, Nginx, SSH) & grabs banners. |
+| **🌐 Mass Scale** | Scan entire subnets (`192.168.1.0/24`) or target lists (`-iL`). |
+| **🛡️ Ops Safe** | Built-in **Rate Limiting** (`--rate`) and **Live Host Detection**. |
+| **📊 Rich Reporting** | Outputs to **Colorized Console**, **JSON**, **CSV**, and **HTML**. |
+| **🔍 Deep Insight** | Extracts HTTP Titles, Server headers, and SSL Certificate info. |
 
 ---
 
 ## 📥 Installation
 
+PortBlitz requires **Python 3.8+**. No complex dependencies or C libraries needed.
+
 ```bash
 git clone https://github.com/mizazhaider-ceh/portblitz.git
 cd portblitz
+# Ready to run!
 ```
 
 ---
 
 ## 💻 Usage
 
-### Service Scan (New in v2.0)
+### 1. Basic Scan (Single Host)
+Scan the most common 1000 ports on a target.
 ```bash
 python portblitz.py example.com
 ```
 
-### Export Results
+### 2. Mass Scanning (v3.0 New!)
+Scan a list of targets from a file or a CIDR range.
 ```bash
-python portblitz.py 192.168.1.1 --json --csv
+# Scan a target list
+python portblitz.py -iL targets.txt --json
+
+# Scan a network range
+python portblitz.py 192.168.1.0/24 -p 80,443 --rate 100
 ```
 
-### High Speed Scan (1000 Concurrency)
+### 3. Service Recon (v2.0)
+Automatically grabs banners, HTTP titles, and detects service versions.
 ```bash
-python portblitz.py 192.168.1.1 -c 1000
+python portblitz.py 10.10.10.5 -p all
+```
+*Output Example:*
+> `[+] Port 80  OPEN (http) | Title: Login Page | Server: Apache/2.4`  
+> `[+] Port 22  OPEN (ssh)  | SSH-2.0-OpenSSH_8.2p1`
+
+### 4. Rate Limiting & Stealth
+Avoid WAFs and IPS bans by controlling packet speed.
+```bash
+# Limit to 50 packets per second
+python portblitz.py target.com --rate 50
 ```
 
-### Specific Port Range
+### 5. Data Export
+Generate machine-readable reports for your pipeline.
 ```bash
-python portblitz.py example.com -p 1-5000
-python portblitz.py example.com -p 80,443,8080
-```
-
-### All Ports (1-65535)
-```bash
-python portblitz.py example.com -p all
+python portblitz.py target.com --json --csv --output results/
 ```
 
 ---
 
-## 📊 Roadmap
+## ⚙️ Command Line Options
 
-We have an exciting roadmap ahead!
+```text
+Target:
+  target                IP (1.1.1.1), Domain (example.com), or CIDR (192.168.1.0/24)
+  -iL, --input-list     Read list of targets from file
 
-- **v1.0** (Completed): Async TCP scanning, HTML reports.
-- **v2.0** (Completed): Service version detection, Banner grabbing, JSON/CSV.
-- **v3.0**: CIDR range scanning & `uvloop` support.
-- **v4.0**: Script Engine (vulnerability checks).
-- **v5.0**: Interactive TUI Dashboard.
+Scan Configuration:
+  -p, --ports           Ports to scan: 'top' (default), 'all' (1-65535), or '80,443'
+  -c, --concurrency     Max concurrent threads (default: 500)
+  --rate                Rate limit in packets/s (default: Unlimited)
+  -t, --timeout         Socket timeout in seconds (default: 1.0)
+  --noping              Skip live host discovery (Force Scan)
 
-See [roadmap.md](roadmap.md) for full details.
+Output:
+  -o, --output          Output directory (default: 'reports')
+  --json                Save results as JSON
+  --csv                 Save results as CSV
+```
 
 ---
 
-## ⚠️ Legal Disclaimer
+## 🗺️ Roadmap
 
-For authorized security testing and educational purposes only. The authors are not responsible for unauthorized use.
+- [x] **v1.0**: Core Async Loop & HTML Reporting
+- [x] **v2.0**: Service Recon, Headers, & Banner Grabbing
+- [x] **v3.0**: Mass Scanning, CIDR, & Rate Limiting
+- [ ] **v4.0**: Script Engine (Vulnerability Checks) & CVE Lookup
+- [ ] **v5.0**: Interactive TUI Dashboard
 
 ---
 
-**Built with 💻 & ☕ by MIHx0**
+## ⚠️ Disclaimer
+
+**PortBlitz** is designed for security professionals and network administrators to audit their *own* networks.
+*   Do not scan targets without authorization.
+*   The developers are not responsible for misuse.
+
+---
+
+**Built with ❤️ by MIHx0 (Mizaz Haider) | Powered by The PenTrix**

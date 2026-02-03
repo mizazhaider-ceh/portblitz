@@ -26,14 +26,14 @@
 - **SSL/TLS Info:** Get Certificate Subject, Issuer, and Expiry.
 - **Export:** JSON/CSV support.
 
-### **v3.0: Scale \u0026 Optimization**
-*Goal: Handle entire networks.*
-- **CIDR Support:** Range scanning (`192.168.1.0/24`).
-- **UVLoop:** Integrate `uvloop` for C-level concurrency speed.
-- **Mass Mode:** File input support.
-
-### **v4.0: Intelligence**
-*Goal: Lightweight vulnerability scanning.*
+### **v3.0: Scale & Mass Scanning**
+*Goal: Handle entire networks efficiently.*
+- **CIDR Support:** Scan ranges `192.168.1.0/24`.
+- **Mass Input:** Read targets from file (`-iL targets.txt`).
+- **Live Host Check:** Ping/TCP Sweep to skip dead hosts.
+- **Rate Limiting:** Control packet rate (`--rate`) to avoid bans.
+- **Smart Exclusion:** Exclude specific IPs/Ports.
+- **Performance:** Structuring for multi-host storage.*
 - **PBSE (PortBlitz Script Engine):** Simple plugin system.
 - **CVE Lookup:** Auto-correlate versions with CVEs.
 

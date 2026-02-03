@@ -25,26 +25,49 @@ STANDARD_PORTS = sorted(list(set(STANDARD_PORTS)))
 
 def main():
     parser = argparse.ArgumentParser(description="PortBlitz - Ultra-fast Async Port Scanner")
-    parser.add_argument("target", help="Target IP or Domain")
+    parser.add_argument("target", nargs='?', help="Target IP, Domain, or CIDR")
+    parser.add_argument("-iL", "--input-list", help="Input from list of hosts/networks")
     parser.add_argument("-c", "--concurrency", type=int, default=500, help="Concurrency level (default: 500)")
     parser.add_argument("-t", "--timeout", type=float, default=1.0, help="Socket timeout (default: 1.0s)")
     parser.add_argument("-p", "--ports", help="Port range (e.g. 1-1000 or 'all')", default="top")
     parser.add_argument("-o", "--output", help="Output directory for reports", default="reports")
+    parser.add_argument("--rate", type=int, default=0, help="Rate limit (packets/s), 0=unlimited")
+    parser.add_argument("--noping", action="store_true", help="Skip live host discovery")
     parser.add_argument("--json", action="store_true", help="Export to JSON")
     parser.add_argument("--csv", action="store_true", help="Export to CSV")
     
     args = parser.parse_args()
     
-    # Update Version Display
+    # Imports for v3.0
+    from utils.net import parse_targets, load_targets_from_file
+    from core.live import filter_live_hosts
+    from core.rate import RateLimiter
     from utils.display import VERSION
-    # Monkey patch version for now or update file (Better to just print it here or update file in next step)
-    # We will update utils/display.py separately to v2.0, so just use logic.
     
     print_banner()
     
-    target = args.target
+    # 1. Load Targets
+    targets = []
+    if args.input_list:
+        try:
+            targets.extend(load_targets_from_file(args.input_list))
+        except FileNotFoundError as e:
+            print(f"{Colors.RED}[!] {e}{Colors.RESET}")
+            sys.exit(1)
+            
+    if args.target:
+        targets.extend(parse_targets(args.target))
+        
+    targets = list(set(targets)) # Deduplicate
     
-    # Parse ports
+    if not targets:
+        print(f"{Colors.RED}[!] No targets specified. Use target arg or -iL{Colors.RESET}")
+        parser.print_help()
+        sys.exit(1)
+
+    # ... (Previous args parsing code remains similar, but we restructure execution)
+    
+    # 2. Parse Ports (Sync)
     ports = []
     if args.ports == "top":
         ports = STANDARD_PORTS
@@ -57,46 +80,69 @@ def main():
         ports = list(range(start, end + 1))
         port_desc = f"Range {start}-{end}"
     else:
-        # Single port or comma list
         ports = [int(p) for p in args.ports.split(",")]
         port_desc = f"Specific ({len(ports)} ports)"
 
-    print(f"{Colors.BOLD}Target:{Colors.RESET} {target}")
-    print(f"{Colors.BOLD}Ports :{Colors.RESET} {port_desc}")
-    print(f"{Colors.BOLD}Speed :{Colors.RESET} {args.concurrency} threads (async)")
+    print(f"{Colors.BOLD}Targets:{Colors.RESET} {len(targets)} hosts")
+    print(f"{Colors.BOLD}Ports  :{Colors.RESET} {port_desc}")
+    print(f"{Colors.BOLD}Speed  :{Colors.RESET} {args.concurrency} threads (Rate: {args.rate if args.rate > 0 else 'Unlimited'} pkts/s)")
     print(f"{Colors.DIM}{'-'*40}{Colors.RESET}\n")
     
-    start_time = time.time()
-    
+    # Async Orchestrator
+    async def run_orchestrator():
+        start_time = time.time()
+        
+        # 3. Live Host Discovery
+        current_targets = targets
+        if not args.noping and len(current_targets) > 1:
+            current_targets = await filter_live_hosts(current_targets)
+            if not current_targets:
+                print(f"{Colors.RED}[!] No live hosts found. Try --noping to force scan.{Colors.RESET}")
+                return
+
+        # 4. Rate Limiter (Created INSIDE the loop)
+        rate_limiter = RateLimiter(args.rate) if args.rate > 0 else None
+
+        # 5. Main Scan Loop
+        total_hosts = len(current_targets)
+        for i, target in enumerate(current_targets, 1):
+            print(f"{Colors.BOLD}[*] Scanning {target} ({i}/{total_hosts})...{Colors.RESET}")
+            
+            try:
+                # Direct await, no new asyncio.run
+                results = await scan_target(target, ports, args.concurrency, args.timeout, rate_limiter)
+                
+                print(f"{Colors.GREEN}[+] Completed {target}: {len(results)} open ports{Colors.RESET}")
+                
+                if results:
+                    report_path = generate_report(target, results, args.output)
+                    
+                    if args.json:
+                        from utils.export import export_json
+                        export_json({"target": target, "results": results}, args.output)
+                        
+                    if args.csv:
+                        from utils.export import export_csv
+                        export_csv({"target": target, "results": results}, args.output)
+                        
+            except Exception as e:
+                print(f"{Colors.RED}[!] Error scanning {target}: {e}{Colors.RESET}")
+        
+        duration = time.time() - start_time
+        print(f"\n{Colors.DIM}{'-'*40}{Colors.RESET}")
+        print(f"{Colors.BOLD}Mass Scan Complete!{Colors.RESET}")
+        print(f"Total Time: {duration:.2f}s")
+        
+    # Start the single event loop
     try:
         if sys.platform == 'win32':
             asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
-            
-        results = asyncio.run(scan_target(target, ports, args.concurrency, args.timeout))
+        
+        asyncio.run(run_orchestrator())
+        
     except KeyboardInterrupt:
         print(f"\n{Colors.YELLOW}[!] Scan interrupted{Colors.RESET}")
         sys.exit(1)
-        
-    duration = time.time() - start_time
-    
-    print(f"\n{Colors.DIM}{'-'*40}{Colors.RESET}")
-    print(f"{Colors.BOLD}Scan Complete!{Colors.RESET}")
-    print(f"Time Taken: {duration:.2f}s")
-    print(f"Open Ports: {len(results)}")
-    
-    if results:
-        report_path = generate_report(target, results, args.output)
-        print(f"\n{Colors.GREEN}[+] HTML Report saved to: {report_path}{Colors.RESET}")
-        
-        if args.json:
-            from utils.export import export_json
-            p = export_json({"target": target, "results": results}, args.output)
-            print(f"{Colors.GREEN}[+] JSON Export saved to: {p}{Colors.RESET}")
-            
-        if args.csv:
-            from utils.export import export_csv
-            p = export_csv({"target": target, "results": results}, args.output)
-            print(f"{Colors.GREEN}[+] CSV Export saved to : {p}{Colors.RESET}")
 
 if __name__ == "__main__":
     main()
