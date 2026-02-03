@@ -72,21 +72,43 @@ async def scan_target(target: str, ports: List[int], concurrency: int = 500, tim
         async with semaphore:
             p, is_open = await scan_port(target, port, timeout)
             if is_open:
-                service = "Unknown"
-                if port == 80: service = "HTTP"
-                elif port == 443: service = "HTTPS"
-                elif port == 22: service = "SSH"
-                elif port == 21: service = "FTP"
-                elif port == 25: service = "SMTP"
-                elif port == 53: service = "DNS"
-                elif port == 3306: service = "MySQL"
-                elif port == 3389: service = "RDP"
-                elif port == 5432: service = "PostgreSQL"
-                elif port == 8080: service = "HTTP-Alt"
-                elif port == 8443: service = "HTTPS-Alt"
+                # v2.0: Deep Service Recon
+                from core.banner import get_banner
+                from core.service import detect_service
                 
-                print(f"  {Colors.GREEN}[+] Port {port:<5} OPEN  ({service}){Colors.RESET}")
-                results.append({"port": port, "service": service})
+                # Fetch banner & extra info
+                info = await get_banner(target, port, timeout=2.0)
+                banner_str = info.get("banner", "")
+                
+                # Basic guess fallback
+                initial_guess = "unknown"
+                if port == 80: initial_guess = "http"
+                elif port == 443: initial_guess = "https"
+                elif port == 22: initial_guess = "ssh"
+                
+                # Detect service using Regex + Banner
+                service = info.get("service")
+                if service == "unknown":
+                    service = detect_service(banner_str, initial_guess)
+                
+                # Enhance display
+                extra = ""
+                if info.get("http_title"):
+                    extra = f" | Title: {info['http_title']}"
+                elif info.get("ssl_info"):
+                    extra = f" | SSL: Yes"
+                elif banner_str:
+                    extra = f" | {banner_str[:40]}..."
+                
+                print(f"  {Colors.GREEN}[+] Port {port:<5} OPEN  ({service}){Colors.RESET}{Colors.DIM}{extra}{Colors.RESET}")
+                
+                results.append({
+                    "port": port, 
+                    "service": service,
+                    "banner": banner_str,
+                    "http_title": info.get("http_title"),
+                    "ssl_info": info.get("ssl_info")
+                })
     
     # Launch all
     await asyncio.gather(*[sem_scan(p) for p in ports])

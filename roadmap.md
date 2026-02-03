@@ -22,6 +22,8 @@
 *Goal: Understand WHAT is running.*
 - **Banner Grabbing:** Fetch service headers.
 - **Service Detection:** Regex matching (Apache, Nginx, etc.).
+- **HTTP Analysis:** Extract `<title>` and `Server` headers.
+- **SSL/TLS Info:** Get Certificate Subject, Issuer, and Expiry.
 - **Export:** JSON/CSV support.
 
 ### **v3.0: Scale \u0026 Optimization**

@@ -19,11 +19,13 @@
 
 PortBlitz is a high-performance, asynchronous TCP port scanner written in Python. Designed for speed and reliability, it leverages non-blocking I/O to scan thousands of ports in seconds, making it a faster, lightweight alternative to standard threading scanners.
 
-### Key Features (v1.0)
-- **⚡ Async Architecture**: Uses Python's `asyncio` for high concurrency (default: 500 threads).
-- **🎨 HTML Reporting**: Generates beautiful, self-contained HTML reports for every scan.
-- **🛡️ No Dependencies**: Runs on standard Python 3.8+ libraries.
-- **🔍 Smart Detection**: Basic service guessing for common ports.
+### Key Features (v2.0)
+- **⚡ Async Architecture**: Uses Python's `asyncio` for high concurrency.
+- **🕵️ Service Recon**: Detects service versions/sw using regex signatures.
+- **� Banner Grabbing**: Captures raw headers from ports.
+- **🌐 HTTP/SSL Analysis**: Extracts titles and generic SSL info.
+- **� Data Export**: Save results to JSON and CSV.
+- **🎨 HTML Reporting**: Beautiful, self-contained reports.
 
 ---
 
@@ -32,16 +34,20 @@ PortBlitz is a high-performance, asynchronous TCP port scanner written in Python
 ```bash
 git clone https://github.com/mizazhaider-ceh/portblitz.git
 cd portblitz
-# No pip install required for v1.0!
 ```
 
 ---
 
 ## 💻 Usage
 
-### Basic Scan (Top 1000 Ports)
+### Service Scan (New in v2.0)
 ```bash
 python portblitz.py example.com
+```
+
+### Export Results
+```bash
+python portblitz.py 192.168.1.1 --json --csv
 ```
 
 ### High Speed Scan (1000 Concurrency)
@@ -66,8 +72,8 @@ python portblitz.py example.com -p all
 
 We have an exciting roadmap ahead!
 
-- **v1.0** (Current): Async TCP scanning, HTML reports.
-- **v2.0**: Service version detection & Banner grabbing.
+- **v1.0** (Completed): Async TCP scanning, HTML reports.
+- **v2.0** (Completed): Service version detection, Banner grabbing, JSON/CSV.
 - **v3.0**: CIDR range scanning & `uvloop` support.
 - **v4.0**: Script Engine (vulnerability checks).
 - **v5.0**: Interactive TUI Dashboard.

@@ -30,8 +30,15 @@ def main():
     parser.add_argument("-t", "--timeout", type=float, default=1.0, help="Socket timeout (default: 1.0s)")
     parser.add_argument("-p", "--ports", help="Port range (e.g. 1-1000 or 'all')", default="top")
     parser.add_argument("-o", "--output", help="Output directory for reports", default="reports")
+    parser.add_argument("--json", action="store_true", help="Export to JSON")
+    parser.add_argument("--csv", action="store_true", help="Export to CSV")
     
     args = parser.parse_args()
+    
+    # Update Version Display
+    from utils.display import VERSION
+    # Monkey patch version for now or update file (Better to just print it here or update file in next step)
+    # We will update utils/display.py separately to v2.0, so just use logic.
     
     print_banner()
     
@@ -62,9 +69,6 @@ def main():
     start_time = time.time()
     
     try:
-        # Run async scan
-        # Windows: default loop ProactorEventLoop supports pipes, but SelectEventLoop might be default on older Py.
-        # Python 3.8+ on Windows defaults to Proactor which works well.
         if sys.platform == 'win32':
             asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
             
@@ -83,6 +87,16 @@ def main():
     if results:
         report_path = generate_report(target, results, args.output)
         print(f"\n{Colors.GREEN}[+] HTML Report saved to: {report_path}{Colors.RESET}")
+        
+        if args.json:
+            from utils.export import export_json
+            p = export_json({"target": target, "results": results}, args.output)
+            print(f"{Colors.GREEN}[+] JSON Export saved to: {p}{Colors.RESET}")
+            
+        if args.csv:
+            from utils.export import export_csv
+            p = export_csv({"target": target, "results": results}, args.output)
+            print(f"{Colors.GREEN}[+] CSV Export saved to : {p}{Colors.RESET}")
 
 if __name__ == "__main__":
     main()
