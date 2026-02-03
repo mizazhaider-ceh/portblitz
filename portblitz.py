@@ -39,22 +39,25 @@ def main():
     parser.add_argument("--vuln", action="store_true", help="Enable CVE Lookup & Vulnerability Checks")
     parser.add_argument("--waf", action="store_true", help="Enable WAF Evasion (Random UA / Delays)")
     parser.add_argument("--bridge", action="store_true", help="Enable Tool Bridge (Auto-trigger Nmap/Nuclei)")
+    parser.add_argument("-i", "--interactive", action="store_true", help="Enter Interactive Command Center (v5.0)")
     
     args = parser.parse_args()
     
-    # Imports for v3.0 logic
+    # Imports
     from utils.net import parse_targets, load_targets_from_file
-    from core.live import filter_live_hosts
-    from core.rate import RateLimiter
     from utils.display import VERSION
-    
-    # Imports for v4.0 Intelligence
-    from core.engine import ScriptEngine
-    from utils.cve import lookup_cves
-    from core.waf import evasion_delay
-    from modules.bridge import ToolBridge
+    from core.orchestrator import ScanOrchestrator
     
     print_banner()
+
+    # 0. Interactive Mode Check
+    if args.interactive:
+        from core.console import PortBlitzConsole
+        try:
+            PortBlitzConsole().cmdloop()
+        except KeyboardInterrupt:
+            print(f"\n{Colors.YELLOW}[!] Exiting Console.{Colors.RESET}")
+        sys.exit(0)
     
     # 1. Load Targets
     targets = []
@@ -70,7 +73,7 @@ def main():
     targets = list(set(targets))
     
     if not targets:
-        print(f"{Colors.RED}[!] No targets specified. Use target arg or -iL{Colors.RESET}")
+        print(f"{Colors.RED}[!] No targets specified. Use target arg, -iL, or -i for interactive mode.{Colors.RESET}")
         parser.print_help()
         sys.exit(1)
     
@@ -92,103 +95,13 @@ def main():
     print(f"{Colors.BOLD}Features:{Colors.RESET} Scans: {args.concurrency}th | Rate: {args.rate if args.rate else 'Unlim'} | Scripts: {'ON' if args.scripts else 'OFF'} | Vuln: {'ON' if args.vuln else 'OFF'}")
     print(f"{Colors.DIM}{'-'*40}{Colors.RESET}\n")
 
-    # Async Orchestrator
-    async def run_orchestrator():
-        start_time = time.time()
-        
-        # Init Engine if scripts enabled
-        script_engine = ScriptEngine() if args.scripts else None
-        
-        # 3. Live Host Discovery
-        current_targets = targets
-        if not args.noping and len(current_targets) > 1:
-            current_targets = await filter_live_hosts(current_targets)
-            if not current_targets:
-                print(f"{Colors.RED}[!] No live hosts found. Try --noping to force scan.{Colors.RESET}")
-                return
-
-        # 4. Rate Limiter
-        rate_limiter = RateLimiter(args.rate) if args.rate > 0 else None
-
-        # 5. Main Scan Loop
-        total_hosts = len(current_targets)
-        for i, target in enumerate(current_targets, 1):
-            print(f"{Colors.BOLD}[*] Scanning {target} ({i}/{total_hosts})...{Colors.RESET}")
-            
-            try:
-                # WAF Evasion
-                if args.waf:
-                    await evasion_delay(200, 1000)
-
-                # SCAN
-                results = await scan_target(target, ports, args.concurrency, args.timeout, rate_limiter)
-                
-                print(f"{Colors.GREEN}[+] Completed {target}: {len(results)} open ports{Colors.RESET}")
-                
-                # POST-SCAN INTELLIGENCE
-                if results and (args.vuln or args.scripts or args.bridge):
-                    print(f"{Colors.CYAN}    Running Intelligence Checks...{Colors.RESET}")
-                    
-                    for res in results:
-                        port = res['port']
-                        banner = res.get('banner', '')
-                        
-                        # 1. CVE Lookup
-                        if args.vuln:
-                            cves = lookup_cves(str(res))
-                            if cves:
-                                print(f"    {Colors.RED}[!] CVEs Found for Port {port}: {', '.join(cves)}{Colors.RESET}")
-                                res['cves'] = cves
-                        
-                        # 2. Script Engine
-                        if script_engine:
-                            script_results = await script_engine.execute_scripts(target, port, res)
-                            if script_results:
-                                for sr in script_results:
-                                    print(f"    {Colors.MAGENTA}[⚡] {sr['script']}: {sr['output']}{Colors.RESET}")
-                                res['scripts'] = script_results
-                                
-                        # 3. Tool Bridge
-                        if args.bridge:
-                            # Nmap Version Scan (for interesting ports)
-                            if port in [21, 22, 80, 443, 445, 3306, 3389]:
-                                print(f"    {Colors.YELLOW}[+] Bridging Nmap for Port {port}...{Colors.RESET}")
-                                nmap_out = await ToolBridge.run_nmap_version(target, port)
-                                # Simple output or could parse
-                                # print(f"      {nmap_out[:50]}...") 
-                                res['nmap'] = nmap_out
-                                
-                            # Nuclei (for Web)
-                            if port in [80, 443, 8080, 8443]:
-                                print(f"    {Colors.YELLOW}[+] Bridging Nuclei for Port {port}...{Colors.RESET}")
-                                nuclei_out = await ToolBridge.run_nuclei(target, port)
-                                if "No results" not in nuclei_out:
-                                    res['nuclei'] = nuclei_out
-
-                # EXPORTS
-                if results:
-                    report_path = generate_report(target, results, args.output)
-                    if args.json:
-                        from utils.export import export_json
-                        export_json({"target": target, "results": results}, args.output)
-                    if args.csv:
-                        from utils.export import export_csv
-                        export_csv({"target": target, "results": results}, args.output)
-                        
-            except Exception as e:
-                print(f"{Colors.RED}[!] Error scanning {target}: {e}{Colors.RESET}")
-        
-        duration = time.time() - start_time
-        print(f"\n{Colors.DIM}{'-'*40}{Colors.RESET}")
-        print(f"{Colors.BOLD}Mass Scan Complete!{Colors.RESET}")
-        print(f"Total Time: {duration:.2f}s")
-        
-    # Start the single event loop
+    # 3. Run Orchestrator
     try:
         if sys.platform == 'win32':
             asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
         
-        asyncio.run(run_orchestrator())
+        orchestrator = ScanOrchestrator(targets, ports, args)
+        asyncio.run(orchestrator.run())
         
     except KeyboardInterrupt:
         print(f"\n{Colors.YELLOW}[!] Scan interrupted{Colors.RESET}")

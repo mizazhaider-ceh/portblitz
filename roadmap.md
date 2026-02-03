@@ -45,8 +45,9 @@
 - **CVE Lookup:** Correlate versions with known vulnerabilities.
 - **WAF Evasion:** Random delays, User-Agent rotation, & Decoys.
 
-### **v5.0: The Command Center**
-*Goal: Enterprise-grade usability.*
-- **TUI Dashboard:** Interactive terminal interface.
-- **Live Charts:** Packets/sec visualization.
-- **Advanced HTML:** Interactive graphs and service hierarchy.
+### **v5.0: The Command Center [COMPLETED]**
+*Goal: Enterprise-grade usability & Persistence.*
+- **Interactive Shell:** Metasploit-style console (`portblitz >`).
+- **Session Management:** Set targets, scan, analyze, and save without exiting.
+- **Live Stats:** ASCII-based dashboard and progress bars.
+- **Visualization:** Basic ANSI charts for port distribution.

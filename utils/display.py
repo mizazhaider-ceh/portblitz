@@ -13,7 +13,7 @@ class Colors:
     BG_BLUE = '\033[44m'
     RESET = '\033[0m'
 
-VERSION = "4.0"
+VERSION = "5.0"
 
 def print_banner():
     """Print the PortBlitz banner."""
