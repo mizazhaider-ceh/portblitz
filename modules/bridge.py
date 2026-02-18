@@ -1,55 +1,73 @@
+"""
+PortBlitz v5.0 — External Tool Bridge
+
+Safely delegates to Nmap / Nuclei via subprocess (no shell injection).
+"""
 
 import asyncio
+import re
 import shutil
-import shlex
-from typing import Optional
 from utils.display import Colors
+
+# Strict whitelist for target strings to prevent command injection
+_SAFE_TARGET = re.compile(r"^[A-Za-z0-9._:/\-]+$")
+
+
+def _validate(value: str, label: str) -> str:
+    """Raise ValueError if *value* contains shell-unsafe characters."""
+    if not _SAFE_TARGET.match(value):
+        raise ValueError(f"Unsafe {label}: {value!r}")
+    return value
+
 
 class ToolBridge:
     """
     Bridge to external security tools (Nmap, Nuclei, etc.).
-    Checks availability and runs them against targets.
+    Uses create_subprocess_exec (NOT shell) for safety.
     """
-    
+
     @staticmethod
     def is_installed(tool_name: str) -> bool:
         return shutil.which(tool_name) is not None
 
     @staticmethod
     async def run_nmap_version(target: str, port: int) -> str:
-        """Runs nmap usage: nmap -sV -p <port> <target>"""
+        """Run: nmap -sV -Pn -n -p <port> <target>"""
         if not ToolBridge.is_installed("nmap"):
             return "Nmap not installed"
-            
-        cmd = f"nmap -sV -Pn -n -p {port} {target}"
-        return await ToolBridge._run_command(cmd)
+
+        _validate(target, "target")
+        return await ToolBridge._run_command(
+            "nmap", "-sV", "-Pn", "-n", "-p", str(int(port)), target
+        )
 
     @staticmethod
     async def run_nuclei(target: str, port: int) -> str:
-        """Runs nuclei usage: nuclei -u http://target:port"""
+        """Run: nuclei -u http(s)://target:port -silent -no-interact"""
         if not ToolBridge.is_installed("nuclei"):
             return "Nuclei not installed"
-            
-        # Nuclei usually targets HTTP/S
-        url = f"http://{target}:{port}" if port not in [443, 8443] else f"https://{target}:{port}"
-        
-        # Fast scan, no interaction
-        cmd = f"nuclei -u {url} -silent -no-interact"
-        return await ToolBridge._run_command(cmd)
+
+        _validate(target, "target")
+        scheme = "https" if port in (443, 8443) else "http"
+        url = f"{scheme}://{target}:{int(port)}"
+        return await ToolBridge._run_command(
+            "nuclei", "-u", url, "-silent", "-no-interact"
+        )
 
     @staticmethod
-    async def _run_command(command: str) -> str:
+    async def _run_command(*args: str) -> str:
+        """Execute an external tool safely (no shell)."""
         try:
-            process = await asyncio.create_subprocess_shell(
-                command,
+            process = await asyncio.create_subprocess_exec(
+                *args,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
             )
             stdout, stderr = await process.communicate()
-            
-            output = stdout.decode().strip()
+
+            output = stdout.decode(errors="replace").strip()
             if not output and stderr:
-                return f"Error: {stderr.decode().strip()}"
+                return f"Error: {stderr.decode(errors='replace').strip()}"
             return output
         except Exception as e:
-            return f"Execution failed: {str(e)}"
+            return f"Execution failed: {e}"

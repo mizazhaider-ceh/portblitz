@@ -37,8 +37,5 @@ ENV/
 
 # PortBlitz Specific
 reports/
-*.html
-*.json
-*.csv
 test_result.txt
 state.json

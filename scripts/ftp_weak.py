@@ -16,7 +16,7 @@ async def run(target: str, port: int, service_info: Dict) -> str:
         # Read banner
         try:
             await asyncio.wait_for(reader.read(1024), timeout=2.0)
-        except:
+        except (asyncio.TimeoutError, ConnectionError):
             pass
             
         # Send USER anonymous

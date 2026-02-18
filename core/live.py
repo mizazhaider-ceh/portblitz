@@ -17,11 +17,11 @@ async def is_host_up(target: str, timeout: float = 1.0) -> bool:
     for port in check_ports:
         try:
             conn = asyncio.open_connection(target, port)
-            reader, writer = await asyncio.wait_for(conn, timeout=timeout/2)
+            reader, writer = await asyncio.wait_for(conn, timeout=timeout / 2)
             writer.close()
             await writer.wait_closed()
             return True
-        except:
+        except (asyncio.TimeoutError, ConnectionRefusedError, OSError, socket.gaierror):
             pass
             
     # 2. If OS is Windows, we can try running system ping command (cheesy but works without raw sockets)
@@ -41,7 +41,7 @@ async def is_host_up(target: str, timeout: float = 1.0) -> bool:
         
         if proc.returncode == 0:
             return True
-    except:
+    except (OSError, FileNotFoundError):
         pass
         
     return False

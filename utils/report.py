@@ -1,14 +1,26 @@
 
+import html as _html
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict
+
+
+def _esc(text) -> str:
+    """Escape untrusted strings for safe HTML embedding."""
+    if text is None:
+        return ""
+    return _html.escape(str(text), quote=True)
+
 
 def generate_report(target: str, open_ports: List[Dict], output_dir: str = "reports") -> str:
     """
     Generate a simple HTML report for PortBlitz v1.0.
     """
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    filename = f"{target}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
+    # Sanitise target for use in filename (strip unsafe chars)
+    safe_target_fn = re.sub(r'[^\w.\-]', '_', target)
+    filename = f"{safe_target_fn}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
     out_path = Path(output_dir) / filename
     
     # Ensure reports dir exists
@@ -16,24 +28,37 @@ def generate_report(target: str, open_ports: List[Dict], output_dir: str = "repo
 
     rows = ""
     for p in open_ports:
-        # Prepare Intelligence Data
+        # Prepare Intelligence Data (all user-controlled data escaped)
         intel_html = ""
-        
+
         # CVEs
         if 'cves' in p and p['cves']:
             for cve in p['cves']:
-                intel_html += f'<div class="tag cve">{cve}</div>'
-                
+                intel_html += f'<div class="tag cve">{_esc(cve)}</div>'
+
         # Scripts
         if 'scripts' in p and p['scripts']:
             for s in p['scripts']:
-                intel_html += f'<div class="intel-block"><span class="intel-label">⚡ {s["script"]}</span>: {s["output"]}</div>'
-        
+                intel_html += (
+                    f'<div class="intel-block">'
+                    f'<span class="intel-label">⚡ {_esc(s["script"])}</span>: '
+                    f'{_esc(s["output"])}'
+                    f'</div>'
+                )
+
         # Bridge (Nmap/Nuclei)
         if 'nmap' in p:
-             intel_html += f'<div class="intel-block"><span class="intel-label">🌉 Nmap</span>: <pre>{p["nmap"][:200]}...</pre></div>'
+            intel_html += (
+                f'<div class="intel-block">'
+                f'<span class="intel-label">🌉 Nmap</span>: '
+                f'<pre>{_esc(p["nmap"][:200])}</pre></div>'
+            )
         if 'nuclei' in p:
-             intel_html += f'<div class="intel-block"><span class="intel-label">☢️ Nuclei</span>: <pre>{p["nuclei"][:200]}...</pre></div>'
+            intel_html += (
+                f'<div class="intel-block">'
+                f'<span class="intel-label">☢️ Nuclei</span>: '
+                f'<pre>{_esc(p["nuclei"][:200])}</pre></div>'
+            )
 
         if not intel_html:
             intel_html = '<span class="dim">-</span>'
@@ -41,15 +66,16 @@ def generate_report(target: str, open_ports: List[Dict], output_dir: str = "repo
         # Banner/Extra Info
         banner = p.get('banner', '')
         if not banner:
-            # Try to construct from other fields if banner empty
-            banner = p.get('service_detail', '') # Fallback
+            banner = p.get('service_detail', '')
+
+        safe_banner = _esc(banner) if banner else '<span class="dim">-</span>'
 
         rows += f"""
         <tr>
             <td class="font-mono">{p['port']}</td>
             <td><span class="badge open">OPEN</span></td>
-            <td class="font-mono">{p.get('service', 'unknown')}</td>
-            <td class="detail-cell">{banner if banner else '<span class="dim">-</span>'}</td>
+            <td class="font-mono">{_esc(p.get('service', 'unknown'))}</td>
+            <td class="detail-cell">{safe_banner}</td>
             <td class="intel-cell">{intel_html}</td>
         </tr>
         """
@@ -60,7 +86,7 @@ def generate_report(target: str, open_ports: List[Dict], output_dir: str = "repo
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>PortBlitz Report - {target}</title>
+        <title>PortBlitz Report - {_esc(target)}</title>
         <style>
             :root {{
                 --bg: #0f172a;
@@ -164,7 +190,7 @@ def generate_report(target: str, open_ports: List[Dict], output_dir: str = "repo
         <div class="container">
             <div class="header">
                 <h1>⚡ PortBlitz Report</h1>
-                <div class="meta">Target: <strong style="color:white">{target}</strong> &bull; Scan Time: {timestamp}</div>
+                <div class="meta">Target: <strong style="color:white">{_esc(target)}</strong> &bull; Scan Time: {timestamp}</div>
             </div>
 
             <table>
